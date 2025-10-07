@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tempest Weather Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+        }
+        .weather-card {
+            background-color: white;
+            border-radius: 0.75rem; /* Smaller radius */
+            padding: 1rem; /* Smaller padding */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: transform 0.2s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .weather-card:hover {
+            transform: translateY(-4px);
+        }
+        .wind-dial {
+            transform-origin: center;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden; width: 220px; background-color: #333; color: #fff;
+            text-align: center; border-radius: 6px; padding: 5px; position: absolute;
+            z-index: 1; bottom: 125%; left: 50%; margin-left: -110px;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .tooltip:hover .tooltiptext { visibility: visible; opacity: 1; }
+        .data-bar-container {
+            width: 100%;
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+            height: 8px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        .data-bar {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.5s ease-out, background-color 0.5s ease;
+        }
+        /* Unit toggle switch */
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #4f46e5; }
+        input:checked + .slider:before { transform: translateX(26px); }
+        /* Custom scrollbar for hourly forecast */
+        .hourly-scroll-container::-webkit-scrollbar { height: 6px; }
+        .hourly-scroll-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .hourly-scroll-container::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+        .hourly-scroll-container::-webkit-scrollbar-thumb:hover { background: #aaa; }
+    </style>
+</head>
+<body class="antialiased text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-6 max-w-7xl">
+        <header class="mb-6 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 mb-1">Tempest Weather Dashboard</h1>
+                <p class="text-md text-gray-600">Real-time data from your personal weather station.</p>
+            </div>
+            <div class="flex items-center gap-4">
+                 <div class="flex items-center gap-2">
+                    <span class="font-medium text-sm text-gray-600">°F, mph</span>
+                    <label class="switch">
+                        <input type="checkbox" id="unit-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="font-medium text-sm text-gray-600">°C, kph</span>
+                </div>
+                <button id="toggle-settings-btn" class="p-2 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300 focus:outline-none">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </header>
+
+        <div id="credentials-section" class="bg-white p-4 rounded-xl shadow-md mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-3">Settings</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <div>
+                    <label for="station-id" class="block text-sm font-medium text-gray-700">Station ID 
+                        <span class="tooltip text-gray-500 cursor-pointer">(?)<span class="tooltiptext">Find this on your station's page in the Tempest app settings.</span></span>
+                    </label>
+                    <input type="text" id="station-id" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., 12345">
+                </div>
+                <div>
+                    <label for="api-token" class="block text-sm font-medium text-gray-700">Personal Use Token
+                        <span class="tooltip text-gray-500 cursor-pointer">(?)<span class="tooltiptext">Create a token in the Tempest app: Settings > Data Authorizations.</span></span>
+                    </label>
+                    <input type="password" id="api-token" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Paste your token here">
+                </div>
+            </div>
+             <div class="mt-4 flex justify-end">
+                <button id="load-data-btn" class="px-5 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Load Weather Data
+                </button>
+            </div>
+        </div>
+
+        <div id="status-message" class="text-center p-4 my-4 hidden"></div>
+
+        <main id="dashboard-content" class="hidden">
+            <div class="mb-6">
+                <h2 class="text-2xl font-semibold mb-3" id="station-name">Current Conditions</h2>
+                <div class="weather-card flex-col md:flex-row items-center justify-between bg-gradient-to-br from-indigo-500 to-blue-600 text-white p-4">
+                    <div class="flex items-center gap-6">
+                        <div id="current-conditions-icon" class="text-6xl"></div>
+                        <div>
+                            <p class="text-md" id="current-timestamp">As of: loading...</p>
+                            <p class="text-6xl font-bold" id="current-temp">--°</p>
+                            <p class="text-xl capitalize" id="current-conditions">Loading...</p>
+                        </div>
+                    </div>
+                    <div class="text-right mt-3 md:mt-0">
+                        <p>Feels Like: <span id="feels-like" class="font-semibold">--°</span></p>
+                        <p>High: <span id="today-high" class="font-semibold">--°</span></p>
+                        <p>Low: <span id="today-low" class="font-semibold">--°</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <!-- Temperature -->
+                <div class="weather-card">
+                    <div class="flex justify-between items-center text-gray-500 mb-1">
+                        <h3 class="font-semibold">Temperature</h3><i data-lucide="thermometer"></i>
+                    </div>
+                    <p class="text-4xl font-bold" id="temp-card">--°</p>
+                    <div class="data-bar-container"><div id="temp-bar" class="data-bar"></div></div>
+                </div>
+                <!-- Humidity -->
+                 <div class="weather-card">
+                    <div class="flex justify-between items-center text-gray-500 mb-1">
+                        <h3 class="font-semibold">Humidity</h3><i data-lucide="droplets"></i>
+                    </div>
+                    <p class="text-4xl font-bold" id="humidity">--<span class="text-xl">%</span></p>
+                    <div class="data-bar-container"><div id="humidity-bar" class="data-bar bg-blue-500"></div></div>
+                </div>
+                <!-- Wind -->
+                <div class="weather-card col-span-2 md:col-span-1">
+                    <div class="flex justify-between items-center text-gray-500 mb-1">
+                         <h3 class="font-semibold">Wind</h3><i data-lucide="wind"></i>
+                    </div>
+                    <div class="flex items-center justify-around gap-2 text-center">
+                        <div class="relative w-20 h-20">
+                            <div id="wind-arrow" class="absolute inset-0 wind-dial">
+                               <svg viewBox="0 0 100 100" class="fill-indigo-600"><polygon points="50,0 70,80 50,60 30,80"/></svg>
+                            </div>
+                        </div>
+                        <div>
+                             <p class="text-3xl font-bold" id="wind-speed">--</p>
+                             <p class="text-gray-500 text-sm" id="wind-speed-unit">mph</p>
+                             <p class="text-gray-500 mt-1 text-sm" id="wind-direction-text">---</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Wind Gust -->
+                <div class="weather-card">
+                    <div class="flex justify-between items-center text-gray-500 mb-1">
+                        <h3 class="font-semibold">Wind Gust</h3><i data-lucide="flag-triangle-right"></i>
+                    </div>
+                    <p class="text-4xl font-bold" id="wind-gust">--</p>
+                    <div class="data-bar-container"><div id="wind-gust-bar" class="data-bar bg-red-500"></div></div>
+                </div>
+                <!-- Rain -->
+                <div class="weather-card">
+                    <div class="flex justify-between items-center text-gray-500 mb-1">
+                         <h3 class="font-semibold">Rainfall Today</h3><i data-lucide="umbrella"></i>
+                    </div>
+                    <p class="text-4xl font-bold" id="rain-today">--</p>
+                    <div class="data-bar-container"><div id="rain-bar" class="data-bar bg-sky-500"></div></div>
+                </div>
+                <!-- Pressure -->
+                <div class="weather-card">
+                     <div class="flex justify-between items-center text-gray-500 mb-1">
+                        <h3 class="font-semibold">Pressure</h3><i data-lucide="gauge-circle"></i>
+                    </div>
+                     <p class="text-4xl font-bold" id="pressure">--</p>
+                     <p class="text-gray-500 text-sm capitalize" id="pressure-trend">---</p>
+                </div>
+                <!-- UV Index -->
+                <div class="weather-card">
+                    <div class="flex justify-between items-center text-gray-500 mb-1">
+                        <h3 class="font-semibold">UV Index</h3><i data-lucide="sun"></i>
+                    </div>
+                     <p class="text-4xl font-bold" id="uv-index">--</p>
+                     <p class="text-gray-500 text-sm capitalize" id="uv-description">---</p>
+                </div>
+                 <!-- Lightning -->
+                <div class="weather-card">
+                    <div class="flex justify-between items-center text-gray-500 mb-1">
+                         <h3 class="font-semibold">Lightning</h3><i data-lucide="cloud-lightning"></i>
+                    </div>
+                     <p class="text-4xl font-bold" id="lightning-count">--</p>
+                     <p class="text-gray-500 text-sm" id="last-lightning">--</p>
+                </div>
+            </div>
+            
+            <div class="mt-6">
+                 <h2 class="text-2xl font-semibold mb-3">Today's Hourly Forecast</h2>
+                 <div class="weather-card bg-gray-50 p-2">
+                    <div id="hourly-forecast-container" class="hourly-scroll-container flex overflow-x-auto space-x-2 pb-2">
+                        <!-- Hourly items will be injected here -->
+                    </div>
+                 </div>
+            </div>
+
+            <div class="mt-6">
+                 <h2 class="text-2xl font-semibold mb-3">Daily Forecast</h2>
+                 <div id="forecast-container" class="weather-card bg-gray-50 p-4"></div>
+            </div>
+
+            <div class="mt-6">
+                 <h2 class="text-2xl font-semibold mb-3">10-Day Forecast</h2>
+                 <div id="ten-day-forecast-container" class="weather-card bg-gray-50 p-4">
+                    <!-- 10-day forecast items will be injected here -->
+                 </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- Global State ---
+        let isMetric = false;
+        let lastObsData = null;
+        let lastForecastData = null;
+        let refreshInterval = null;
+
+        // --- DOM Elements ---
+        const stationIdInput = document.getElementById('station-id');
+        const apiTokenInput = document.getElementById('api-token');
+        const loadDataBtn = document.getElementById('load-data-btn');
+        const toggleSettingsBtn = document.getElementById('toggle-settings-btn');
+        const unitToggle = document.getElementById('unit-toggle');
+        const credentialsSection = document.getElementById('credentials-section');
+        const statusMessage = document.getElementById('status-message');
+        const dashboardContent = document.getElementById('dashboard-content');
+        
+        // --- Utility Functions ---
+        function showStatus(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-blue-100', 'text-blue-700');
+            statusMessage.classList.add(isError ? 'bg-red-100' : 'bg-blue-100', isError ? 'text-red-700' : 'text-blue-700');
+            dashboardContent.classList.add('hidden');
+        }
+        function convertToCardinal(deg) { const d=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']; return d[Math.round(deg/22.5)%16]; }
+        function getUvDescription(uv) { if (uv<=2)return'Low';if(uv<=5)return'Moderate';if(uv<=7)return'High';if(uv<=10)return'Very High';return'Extreme'; }
+        function getWeatherIcon(icon) { const i={'clear-day':'☀️','clear-night':'🌙','cloudy':'☁️','foggy':'🌫️','partly-cloudy-day':'⛅️','partly-cloudy-night':'☁️🌙','possibly-rainy-day':'🌦️','possibly-rainy-night':'🌧️','possibly-sleet-day':'🌨️','possibly-sleet-night':'🌨️','possibly-snow-day':'🌨️','possibly-snow-night':'🌨️','rainy':'🌧️','sleet':'🌨️','snow':'❄️','thunderstorm':'⛈️','windy':'💨'};return i[icon]||'❓';}
+
+
+        // --- Main Application Logic ---
+        async function fetchWeatherData(stationId, token, isAutoRefresh = false) {
+            if (!isAutoRefresh) {
+                showStatus('Fetching latest weather data...', false);
+                loadDataBtn.disabled = true;
+                loadDataBtn.textContent = 'Loading...';
+            }
+            
+            // Clear previous interval if it exists
+            if (refreshInterval) clearInterval(refreshInterval);
+
+            const obsUrl = `https://swd.weatherflow.com/swd/rest/observations/station/${stationId}?token=${token}`;
+            const forecastUrl = `https://swd.weatherflow.com/swd/rest/better_forecast?station_id=${stationId}&token=${token}`;
+            
+            try {
+                const [obsResponse, forecastResponse] = await Promise.all([fetch(obsUrl), fetch(forecastUrl)]);
+                if (!obsResponse.ok) throw new Error(`Observations: ${(await obsResponse.json()).status_message}`);
+                if (!forecastResponse.ok) throw new Error(`Forecast: ${(await forecastResponse.json()).status_message}`);
+
+                lastObsData = await obsResponse.json();
+                lastForecastData = await forecastResponse.json();
+
+                if (!isAutoRefresh) {
+                    localStorage.setItem('tempestStationId', stationId);
+                    localStorage.setItem('tempestApiToken', token);
+                    credentialsSection.classList.add('hidden');
+                }
+                updateUI();
+                
+                // Set up the next refresh
+                refreshInterval = setInterval(() => {
+                    fetchWeatherData(stationId, token, true);
+                }, 10 * 60 * 1000); // 10 minutes
+
+            } catch (error) {
+                console.error("API Error:", error);
+                showStatus(`API Error: ${error.message}. Please check credentials and network.`, true);
+                if (!isAutoRefresh) credentialsSection.classList.remove('hidden');
+                // Interval is already cleared, so it stops on error.
+            } finally {
+                 if (!isAutoRefresh) {
+                    loadDataBtn.disabled = false;
+                    loadDataBtn.textContent = 'Load Weather Data';
+                }
+            }
+        }
+
+        function updateUI() {
+            if (!lastObsData || !lastForecastData) return;
+            
+            statusMessage.classList.add('hidden');
+            dashboardContent.classList.remove('hidden');
+
+            const obs = lastObsData.obs[0];
+            const forecast = lastForecastData.forecast;
+            const currentCond = lastForecastData.current_conditions;
+            
+            const tempC = obs.air_temperature;
+            const temp = isMetric ? tempC : (tempC * 9/5 + 32);
+            const feelsLike = isMetric ? obs.feels_like : (obs.feels_like * 9/5 + 32);
+            const high = isMetric ? forecast.daily[0].air_temp_high : (forecast.daily[0].air_temp_high * 9/5 + 32);
+            const low = isMetric ? forecast.daily[0].air_temp_low : (forecast.daily[0].air_temp_low * 9/5 + 32);
+            const windMs = obs.wind_avg;
+            const windSpeed = isMetric ? (windMs * 3.6) : (windMs * 2.23694);
+            const windGust = isMetric ? (obs.wind_gust * 3.6) : (obs.wind_gust * 2.23694);
+            const windUnit = isMetric ? 'kph' : 'mph';
+            const rainMm = obs.precip_accum_local_day;
+            const rain = isMetric ? rainMm : (rainMm * 0.03937);
+            const rainUnit = isMetric ? 'mm' : 'in';
+            const pressureHpa = obs.barometric_pressure;
+            const pressure = isMetric ? pressureHpa : (pressureHpa * 0.02953);
+
+            document.getElementById('station-name').textContent = `Current Conditions for ${lastForecastData.location_name}`;
+            document.getElementById('current-timestamp').textContent = `As of: ${new Date(obs.timestamp * 1000).toLocaleTimeString()}`;
+            document.getElementById('current-temp').textContent = `${temp.toFixed(1)}°`;
+            document.getElementById('current-conditions').textContent = currentCond.conditions;
+            document.getElementById('current-conditions-icon').textContent = getWeatherIcon(currentCond.icon);
+            document.getElementById('feels-like').textContent = `${feelsLike.toFixed(1)}°`;
+            document.getElementById('today-high').textContent = `${high.toFixed(1)}°`;
+            document.getElementById('today-low').textContent = `${low.toFixed(1)}°`;
+            document.getElementById('temp-card').textContent = `${temp.toFixed(1)}°`;
+            document.getElementById('humidity').innerHTML = `${obs.relative_humidity.toFixed(0)}<span class="text-xl">%</span>`;
+            document.getElementById('wind-arrow').style.transform = `rotate(${obs.wind_direction + 180}deg)`;
+            document.getElementById('wind-speed').textContent = windSpeed.toFixed(1);
+            document.getElementById('wind-speed-unit').textContent = windUnit;
+            document.getElementById('wind-direction-text').textContent = `from ${convertToCardinal(obs.wind_direction)}`;
+            document.getElementById('wind-gust').textContent = `${windGust.toFixed(1)}`;
+            document.getElementById('rain-today').textContent = `${rain.toFixed(2)} ${rainUnit}`;
+            document.getElementById('pressure').textContent = pressure.toFixed(isMetric ? 1 : 2);
+            document.getElementById('pressure-trend').textContent = obs.pressure_trend;
+            document.getElementById('uv-index').textContent = obs.uv.toFixed(1);
+            document.getElementById('uv-description').textContent = getUvDescription(obs.uv);
+            document.getElementById('lightning-count').textContent = obs.lightning_strike_count_last_3hr;
+            document.getElementById('last-lightning').textContent = obs.lightning_strike_last_dist > 0 ? `${obs.lightning_strike_last_dist} km away` : 'None recently';
+
+            const tempScaleVal = (tempC - (-10)) / (40 - (-10));
+            const tempBar = document.getElementById('temp-bar');
+            tempBar.style.width = `${Math.max(0, Math.min(1, tempScaleVal)) * 100}%`;
+            if (tempC <= 0) tempBar.style.backgroundColor = '#3b82f6'; else if (tempC <= 22) tempBar.style.backgroundColor = '#22c55e'; else tempBar.style.backgroundColor = '#ef4444';
+            document.getElementById('humidity-bar').style.width = `${obs.relative_humidity}%`;
+            const gustScale = (isMetric ? windGust / 96 : windGust / 60);
+            document.getElementById('wind-gust-bar').style.width = `${Math.max(0, Math.min(1, gustScale)) * 100}%`;
+            const rainScale = (isMetric ? rain / 50 : rain / 2);
+            document.getElementById('rain-bar').style.width = `${Math.max(0, Math.min(1, rainScale)) * 100}%`;
+            
+            renderDailyForecast(forecast);
+            renderHourlyForecast(forecast);
+            renderTenDayForecast(forecast);
+            lucide.createIcons();
+        }
+
+        let TEMP_SCALE_MIN_C = -15;
+        let TEMP_SCALE_MAX_C = 45;
+        let TEMP_SCALE_RANGE = TEMP_SCALE_MAX_C - TEMP_SCALE_MIN_C;
+
+        function getTempBarPosition(lowC) {
+            const relativePos = lowC - TEMP_SCALE_MIN_C;
+            const percentage = (relativePos / TEMP_SCALE_RANGE) * 100;
+            return Math.max(0, Math.min(100, percentage));
+        }
+
+        function getTempBarWidth(lowC, highC) {
+            const width = highC - lowC;
+            const percentage = (width / TEMP_SCALE_RANGE) * 100;
+            return Math.max(0, Math.min(100, percentage));
+        }
+        
+        function renderTenDayForecast(forecastData) {
+            const container = document.getElementById('ten-day-forecast-container');
+            container.innerHTML = '';
+            const nextTenDays = forecastData.daily.slice(1); // Get all days except today
+
+            if (nextTenDays.length === 0) {
+                container.innerHTML = '<p class="text-gray-500">10-day forecast not available.</p>';
+                return;
+            }
+            
+            // --- Heuristic for scale limits ---
+            const minForecastLowC = Math.min(...nextTenDays.map(d => d.air_temp_low));
+            const maxForecastHighC = Math.max(...nextTenDays.map(d => d.air_temp_high));
+            
+            // If all lows > 0F (-17.78C), left limit is 0F. Else -40F (-40C).
+            TEMP_SCALE_MIN_C = minForecastLowC > -17.78 ? -17.78 : -40;
+            // If all highs < 100F (37.78C), right limit is 100F. Else 140F (60C).
+            TEMP_SCALE_MAX_C = maxForecastHighC < 37.78 ? 37.78 : 60;
+            TEMP_SCALE_RANGE = TEMP_SCALE_MAX_C - TEMP_SCALE_MIN_C;
+
+            // --- Generate Temperature Scale Points ---
+            let scalePointsC = [];
+            if (isMetric) {
+                const start = Math.ceil(TEMP_SCALE_MIN_C / 5) * 5;
+                for (let temp = start; temp <= TEMP_SCALE_MAX_C; temp += 5) {
+                    scalePointsC.push(temp);
+                }
+            } else { // Fahrenheit logic
+                let pointsF = new Set();
+                const minF = TEMP_SCALE_MIN_C * 9/5 + 32;
+                const maxF = TEMP_SCALE_MAX_C * 9/5 + 32;
+                const startF = Math.ceil(minF / 10) * 10;
+
+                for (let tempF = startF; tempF <= maxF; tempF += 10) {
+                    if (tempF !== 30) { pointsF.add(tempF); }
+                }
+                if (minF <= 32 && maxF >= 32) { pointsF.add(32); }
+                scalePointsC = Array.from(pointsF).sort((a,b) => a - b).map(f => (f - 32) * 5/9);
+            }
+
+            // --- Render Temperature Scale ---
+            let scaleLabelsHtml = '';
+            scalePointsC.forEach((tempC, index) => {
+                const position = getTempBarPosition(tempC);
+                const tempLabelValue = isMetric ? tempC : (tempC * 9/5 + 32);
+                let tempLabelText = `${Math.round(tempLabelValue)}°`;
+                let fontWeightClass = '';
+
+                if (Math.abs(tempC) < 0.01) { fontWeightClass = 'font-bold'; }
+                if (index === 0 || index === scalePointsC.length - 1) {
+                    tempLabelText += isMetric ? 'C' : 'F';
+                }
+
+                scaleLabelsHtml += `<div class="absolute -translate-x-1/2" style="left: ${position}%;">
+                                       <span class="absolute -top-1 left-1/2 -translate-x-1/2 w-px h-1 bg-gray-400"></span>
+                                       <span class="text-xs ${fontWeightClass}">${tempLabelText}</span>
+                                   </div>`;
+            });
+            const scaleHtml = `
+                <div class="flex items-center text-gray-500 mb-1">
+                    <div class="w-12"></div> <!-- Day -->
+                    <div class="w-10"></div> <!-- Icon -->
+                    <div class="w-8"></div> <!-- Low -->
+                    <div class="flex-1 relative h-4 mx-2">
+                        ${scaleLabelsHtml}
+                    </div>
+                    <div class="w-8"></div> <!-- High -->
+                    <div class="w-16"></div> <!-- Precip -->
+                </div>`;
+            container.innerHTML += scaleHtml;
+
+            // --- Create Freezing Line Marker ---
+            const freezingPointPosition = getTempBarPosition(0);
+            const isFreezingVisible = TEMP_SCALE_MIN_C <= 0 && TEMP_SCALE_MAX_C >= 0;
+            let freezingLineHtml = '';
+            if (isFreezingVisible) {
+                freezingLineHtml = `<div class="absolute top-0 bottom-0 w-px bg-slate-500 opacity-75" style="left: ${freezingPointPosition}%;"></div>`;
+            }
+
+            // --- Render Daily Rows ---
+            let dailyRowsHtml = '';
+            nextTenDays.forEach(day => {
+                const dayDate = new Date(day.day_start_local * 1000);
+                const dayName = dayDate.toLocaleDateString('en-US', { weekday: 'short' });
+                
+                const highC = day.air_temp_high;
+                const lowC = day.air_temp_low;
+
+                const high = isMetric ? highC : (highC * 9/5 + 32);
+                const low = isMetric ? lowC : (lowC * 9/5 + 32);
+
+                const barLeft = getTempBarPosition(lowC);
+                const barWidth = getTempBarWidth(lowC, highC);
+
+                dailyRowsHtml += `
+                    <div class="flex items-center justify-between text-sm py-1">
+                        <p class="font-semibold w-12 text-gray-700">${dayName}</p>
+                        <p class="text-2xl w-10 text-center">${getWeatherIcon(day.icon)}</p>
+                        <p class="text-gray-500 w-8 text-right font-medium">${low.toFixed(0)}°</p>
+                        <div class="flex-1 bg-gray-200 rounded-full h-2 mx-2 relative">
+                             <div class="bg-gradient-to-r from-blue-400 via-yellow-400 to-red-500 h-2 rounded-full" 
+                                  style="margin-left: ${barLeft}%; width: ${barWidth}%;">
+                             </div>
+                             ${freezingLineHtml}
+                        </div>
+                        <p class="font-bold w-8 text-left">${high.toFixed(0)}°</p>
+                        <div class="flex items-center text-sky-600 w-16 justify-end">
+                            <i data-lucide="umbrella" class="w-4 h-4 mr-1"></i>
+                            <span class="font-medium">${day.precip_probability}%</span>
+                        </div>
+                    </div>`;
+            });
+            container.innerHTML += `<div class="space-y-1">${dailyRowsHtml}</div>`;
+            lucide.createIcons();
+        }
+
+        function renderDailyForecast(forecastData) {
+            const forecastContainer = document.getElementById('forecast-container');
+            forecastContainer.innerHTML = '';
+            const tomorrow = forecastData.daily[1];
+            if (!tomorrow) { forecastContainer.innerHTML = '<p>Daily forecast not available.</p>'; return; }
+
+            const high = isMetric ? tomorrow.air_temp_high : (tomorrow.air_temp_high * 9/5 + 32);
+            const low = isMetric ? tomorrow.air_temp_low : (tomorrow.air_temp_low * 9/5 + 32);
+            const dayName = new Date(tomorrow.day_start_local * 1000).toLocaleDateString('en-US', { weekday: 'long' });
+            
+            const tomorrowStart = tomorrow.day_start_local;
+            const tomorrowEnd = tomorrowStart + (24 * 60 * 60);
+            const tomorrowsHours = forecastData.hourly.filter(hour => hour.time >= tomorrowStart && hour.time < tomorrowEnd);
+
+            let hourlyHtml = '<p class="text-gray-500 text-sm p-4">No hourly data available for tomorrow.</p>';
+            if(tomorrowsHours.length > 0) {
+                hourlyHtml = tomorrowsHours.map(hour => {
+                    const hourDate = new Date(hour.time * 1000);
+                    const hourString = hourDate.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }).replace(' ', '');
+                    const tempC = hour.air_temperature;
+                    const temp = isMetric ? tempC : (tempC * 9 / 5 + 32);
+                    return `
+                        <div class="flex flex-col items-center flex-shrink-0 text-center p-2 rounded-lg min-w-[60px]">
+                            <p class="font-medium text-sm text-gray-600">${hourString}</p>
+                            <p class="text-3xl my-1">${getWeatherIcon(hour.icon)}</p>
+                            <p class="font-bold">${temp.toFixed(0)}°</p>
+                        </div>`;
+                }).join('');
+            }
+
+            forecastContainer.innerHTML = `
+                <div class="flex flex-col md:flex-row items-center justify-between text-center md:text-left">
+                    <div class="mb-4 md:mb-0">
+                        <h4 class="text-xl font-bold">${dayName}</h4>
+                        <p class="text-gray-600 capitalize">${tomorrow.conditions}</p>
+                    </div>
+                    <div class="text-5xl mb-4 md:mb-0">${getWeatherIcon(tomorrow.icon)}</div>
+                    <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-md">
+                        <div class="font-semibold text-gray-500">High</div><div class="text-red-500 font-bold">${high.toFixed(0)}°</div>
+                        <div class="font-semibold text-gray-500">Low</div><div class="text-blue-500 font-bold">${low.toFixed(0)}°</div>
+                        <div class="font-semibold text-gray-500">Precip.</div><div>${tomorrow.precip_probability}%</div>
+                    </div>
+                </div>
+                <div class="mt-4 border-t pt-3">
+                     <div class="hourly-scroll-container flex overflow-x-auto space-x-2 pb-2">
+                        ${hourlyHtml}
+                    </div>
+                </div>`;
+        }
+
+        function renderHourlyForecast(forecastData) {
+            const container = document.getElementById('hourly-forecast-container');
+            container.innerHTML = '';
+            const now = Date.now() / 1000;
+            const next12Hours = forecastData.hourly.filter(hour => hour.time > now).slice(0, 12);
+
+            if (next12Hours.length === 0) {
+                container.innerHTML = '<p class="text-gray-500">Hourly forecast data is not available yet.</p>';
+                return;
+            }
+
+            next12Hours.forEach(hour => {
+                const hourDate = new Date(hour.time * 1000);
+                const hourString = hourDate.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }).replace(' ', '');
+                const tempC = hour.air_temperature;
+                const temp = isMetric ? tempC : (tempC * 9 / 5 + 32);
+                container.innerHTML += `
+                    <div class="flex flex-col items-center flex-shrink-0 text-center p-2 rounded-lg min-w-[60px]">
+                        <p class="font-medium text-sm text-gray-600">${hourString}</p>
+                        <p class="text-3xl my-1">${getWeatherIcon(hour.icon)}</p>
+                        <p class="font-bold">${temp.toFixed(0)}°</p>
+                    </div>`;
+            });
+        }
+
+        // --- Event Listeners and Initialization ---
+        loadDataBtn.addEventListener('click', () => {
+            const stationId = stationIdInput.value.trim();
+            const token = apiTokenInput.value.trim();
+            if (stationId && token) fetchWeatherData(stationId, token);
+            else showStatus('Please enter both a Station ID and an API Token.', true);
+        });
+
+        toggleSettingsBtn.addEventListener('click', () => {
+            credentialsSection.classList.toggle('hidden');
+        });
+
+        unitToggle.addEventListener('change', (e) => {
+            isMetric = e.target.checked;
+            localStorage.setItem('tempestIsMetric', isMetric);
+            updateUI();
+        });
+
+        const savedStationId = localStorage.getItem('tempestStationId');
+        const savedApiToken = localStorage.getItem('tempestApiToken');
+        const savedIsMetric = localStorage.getItem('tempestIsMetric') === 'true';
+        unitToggle.checked = savedIsMetric;
+        isMetric = savedIsMetric;
+
+        if (savedStationId && savedApiToken) {
+            stationIdInput.value = savedStationId;
+            apiTokenInput.value = savedApiToken;
+            fetchWeatherData(savedStationId, savedApiToken);
+        } else {
+            showStatus('Please enter your Tempest credentials to load data.', false);
+            dashboardContent.classList.add('hidden');
+            credentialsSection.classList.remove('hidden');
+        }
+        
+        lucide.createIcons();
+    </script>
+</body>
+</html>
+
