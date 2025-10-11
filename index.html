@@ -450,7 +450,15 @@
                     const hourDate = new Date(hr.time * 1000);
                     const hourString = hourDate.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }).replace(' ', '');
                     const temp = isMetric ? hr.air_temperature : (hr.air_temperature * 9 / 5 + 32);
-                    return `<div class="flex flex-col items-center flex-shrink-0 text-center p-2 rounded-lg min-w-[60px]"><p class="font-medium text-sm text-gray-600">${hourString}</p><p class="text-3xl my-1" title="${hr.conditions}">${getWeatherIcon(hr.icon, `Daily forecast (hourly) for ${dayName} at ${hourString}`)}</p><p class="font-bold">${temp.toFixed(0)}°</p></div>`;
+                    return `<div class="flex flex-col items-center flex-shrink-0 text-center p-2 rounded-lg min-w-[60px]">
+                                <p class="font-medium text-sm text-gray-600">${hourString}</p>
+                                <p class="text-3xl my-1" title="${hr.conditions}">${getWeatherIcon(hr.icon, `Daily forecast (hourly) for ${dayName} at ${hourString}`)}</p>
+                                <p class="font-bold">${temp.toFixed(0)}°</p>
+                                <div class="flex items-center text-sky-600 text-xs mt-1">
+                                    <i data-lucide="umbrella" class="w-3 h-3 mr-0.5"></i>
+                                    <span>${hr.precip_probability}%</span>
+                                </div>
+                            </div>`;
                 }).join('');
             }
 
@@ -470,7 +478,16 @@
                 const hourDate = new Date(hr.time * 1000);
                 const hourString = hourDate.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }).replace(' ', '');
                 const temp = isMetric ? hr.air_temperature : (hr.air_temperature * 9 / 5 + 32);
-                container.innerHTML += `<div class="flex flex-col items-center flex-shrink-0 text-center p-2 rounded-lg min-w-[60px]"><p class="font-medium text-sm text-gray-600">${hourString}</p><p class="text-3xl my-1" title="${hr.conditions}">${getWeatherIcon(hr.icon, `Today's hourly forecast at ${hourString}`)}</p><p class="font-bold">${temp.toFixed(0)}°</p></div>`;
+                container.innerHTML += `
+                    <div class="flex flex-col items-center flex-shrink-0 text-center p-2 rounded-lg min-w-[60px]">
+                        <p class="font-medium text-sm text-gray-600">${hourString}</p>
+                        <p class="text-3xl my-1" title="${hr.conditions}">${getWeatherIcon(hr.icon, `Today's hourly forecast at ${hourString}`)}</p>
+                        <p class="font-bold">${temp.toFixed(0)}°</p>
+                        <div class="flex items-center text-sky-600 text-xs mt-1">
+                            <i data-lucide="umbrella" class="w-3 h-3 mr-0.5"></i>
+                            <span>${hr.precip_probability}%</span>
+                        </div>
+                    </div>`;
             });
         }
 
